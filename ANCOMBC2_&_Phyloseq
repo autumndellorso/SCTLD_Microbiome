@@ -1,4 +1,3 @@
-#SCTLD_Microbiome
 ## INSTALLING AND LOADING PACKAGES ##
 
 install.packages("devtools")
@@ -58,30 +57,36 @@ library(paletteer)
 
 ## READING IN FILES ##
 
-# Reading the taxonomy and asv table in
+#Reading the taxonomy and asv table in
 taxonomy = readr::read_tsv("C:/Users/dello/OneDrive/Documents/NOAA Internship/taxonomy.tsv")
 print(taxonomy)
 
-# Reading in the taxonomy by .qza file. Produces the same thing as reading it in by .tsv as shown above.
+#Reading in the taxonomy by .qza file. Produces the same thing as reading it in by .tsv
 Tax = read_qza("C:/Users/dello/OneDrive/Documents/NOAA Internship/taxon_SCTLD_Acer.qza")
 Tax_data = Tax$data
 
 ASV = read_qza("C:/Users/dello/OneDrive/Documents/NOAA Internship/table-BacArc_SCTLD_Acer.qza")
 ASV_data = ASV$data
 
-# Setting my working directory
+#Setting my working directory
 setwd("C:/Users/dello/OneDrive/Documents/NOAA Internship")
 
-# Reading in the metadata csv file
+#Reading in the metadata csv file from the NOAA drive steph and I made
 metadata = read.csv("Revised_Metadata_SR.csv", header = TRUE, row.names = 1)
+
+#Removing two samples from metadata that I wont need for later Ofav analysis
+metadata_O = metadata[!row.names(metadata) %in% c("100-Autumn16s", "13-Autumn16s"),]
+
+#Removing paired Ofav samples
+metadata_O_D = metadata[!row.names(metadata) %in% c("100-Autumn16s", "13-Autumn16s", "16-Autumn16s", "12-Autumn16s"),]
 
 #############################################################################################
 
-## PHYLOSEQ OBJECT AND ADJUSTING TAXA TABLE ##
+## CREATE PHYLOSEQ OBJECT AND ADJUST TAXA TABLE ##
 
-# Everything for the phyloseq object is now read in.
-# This separated taxonomy column from tab delim to separate feature columns, got rid of the confidence column, and added an ASV column.
-# Also filtering out whole rows that have chlorophyta and NA in the Phylum column.
+#Everything for the phyloseq object is now read in.
+#This separated taxonomy column from tab delim to separate feature columns, got rid of the confidence column, and added an ASV column.
+#Also filtering out whole rows that have chlorophyta and NA in the Phylum column, turns out I didnt need to do this but keeping the code for reference.
 Taxo <- Tax$data %>% as_tibble() %>% separate(Taxon, sep=";", c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")) %>%
   select(-Confidence) %>% arrange(Feature.ID) %>% mutate(ASV = 1:n()) %>% 
   mutate(newcol = "ASV") %>%
@@ -89,93 +94,130 @@ Taxo <- Tax$data %>% as_tibble() %>% separate(Taxon, sep=";", c("Kingdom", "Phyl
   #filter(Phylum !=" p__Chlorophyta") %>%
   #filter(Phylum !="NA")
 
-# Making a phyloseq object.
+#Making a phyloseq object.
 phy= phyloseq(otu_table(ASV_data, taxa_are_rows= T),
              tax_table(as.data.frame(Taxo) %>% column_to_rownames("Feature.ID") %>%
                          as.matrix()), sample_data(metadata))
-# Number of taxa
+#phyloseq with removed Ofav controls
+phy2= phyloseq(otu_table(ASV_data, taxa_are_rows= T),
+              tax_table(as.data.frame(Taxo) %>% column_to_rownames("Feature.ID") %>%
+                          as.matrix()), sample_data(metadata_O))
+#phyloseq with removed ofav pairs
+phy3= phyloseq(otu_table(ASV_data, taxa_are_rows= T),
+               tax_table(as.data.frame(Taxo) %>% column_to_rownames("Feature.ID") %>%
+                           as.matrix()), sample_data(metadata_O_D))
+#number of taxa
 ntaxa(phy) #12302
+ntaxa(phy2) #12302
 
-# Number of samples
+#number of samples
 nsamples(phy) #102
+nsamples(phy2) #100
+nsamples(phy3) #98
 
-# Number of variables
-sample_variables(phy) #17 metadata columns
+#number of variables
+sample_variables(phy) #18 metadata columns
+sample_variables(phy2) #20
 
 #############################################################################################
 
 ## PHYLOGENETIC TREE ##
 
-# Reading in the phylogenetic tree and trying to view it. 
-# Comes out an absolute jumble. Sub-setting would make it more readable.
+#Reading in the phylogenetic tree and trying to view it. 
+#Comes out an absolute jumble. Sub-setting would make it more readable.
 Tree = ape::read.tree("C:/Users/dello/OneDrive/Documents/NOAA Internship/tree.nwk")
+
 plotTree(Tree)
+#This made the font smaller, but unsuccessfully removed labels
+plotTree(Tree,fsize=0.5, ftype="i", show.tip.label = FALSE, show.node.label = FALSE) 
 
 #############################################################################################
 
-## FILTERING PHYLOSEQ OBJECT METADATA ##
+## SUBSETTING AND FILTERING PHYLOSEQ OBJECT METADATA ##
 
-# Subsetting phyloseq metadata into Montastrea and Orbicella, then by treatment and paired.
+#Subsetting phyloseq metadata into Montastrea and Orbicella together, then by treatment and paired.
 MO = c("Mcav", "Ofav")  
 DC = c("Disease","Control")
 phyMO = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(MO) & sample_data(phy)$Paired == "paired")
 sample_data(phyMO)
-
-# Subsetting to Mcav only
-Mcav = c("Mcav")
-phyMcav = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Mcav) & sample_data(phy)$Paired == "paired")
-sample_data(phyMcav)
-
-# Subsetting to Ofav only
-Ofav = c("Ofav")
-phyOfav = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Ofav) & sample_data(phy)$Paired == "paired")
-sample_data(phyMO)
-
-# Filter mcav and ofav phyloseq object that include only the taxa (ASVs) that have a count greater than 6 in at least 20% of the samples
+#Filter mcav and ofav phyloseq object that include only the taxa (ASVs) that have a count greater than 6 in at least 20% of the samples
 phyMO_filt = filter_taxa(phyMO, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyMO_filt
 
-# Filter only mcav
+#Subset only Mcav
+Mcav = c("Mcav")
+DC = c("Disease","Control")
+phyMcav = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Mcav) & sample_data(phy)$Paired == "paired")
+sample_data(phyMcav)
+#Filter only Mcav
 phyMcav_filt = filter_taxa(phyMcav, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyMcav_filt
 
-# Filter only ofav
+#Subset only Ofav
+Ofav = c("Ofav")
+phyOfav = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Ofav) & sample_data(phy)$Paired == "paired")
+sample_data(phyOfav)
+#Filter only ofav
 phyOfav_filt = filter_taxa(phyOfav, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyOfav_filt
 
-# Subsetting phyloseq metadata into Acropora and Porites, then by treatment and paired.
+#Subset Ofav with removed controls only
+phyOfav2 = subset_samples(phy2, sample_data(phy2)$Treatment %in% c(DC) & sample_data(phy2)$CoralSpecies %in% c(Ofav) & sample_data(phy2)$Paired == "paired")
+sample_data(phyOfav2)
+#Filter removed pair ofav
+phyOfav2_filt = filter_taxa(phyOfav2, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
+phyOfav2_filt
+
+#Subset Ofav with removed pairs 
+phyOfav3 = subset_samples(phy3, sample_data(phy3)$Treatment %in% c(DC) & sample_data(phy3)$CoralSpecies %in% c(Ofav) & sample_data(phy3)$Paired == "paired")
+sample_data(phyOfav3)
+#Filter Ofav removed pairs
+phyOfav3_filt = filter_taxa(phyOfav3, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
+phyOfav3_filt
+
+#Subsetting phyloseq metadata into Acropora and Porites together, then by treatment and paired.
 AP = c("Acer","Past")
 phyAP = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(AP) & sample_data(phy)$Paired == "paired")
 phyAP.dataframe = as.data.frame(sample_data(phyAP))
-
-# Filter acer and past phyloseq object that include only the taxa (ASVs) that have a count greater than 6 in at least 20% of the samples
+#Filter Acropora and Porites
 phyAP_filt = filter_taxa(phyAP, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyAP_filt
 
-# Subsetting phyloseq metadata into Porites only, then by treatment and paired.
+#Subsetting phyloseq metadata into Porites only
 Porites = c("Past")
 phyP = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Porites) & sample_data(phy)$Paired == "paired")
 phyP.dataframe = as.data.frame(sample_data(phyAP))
-
-# Filter acer and past phyloseq object that include only the taxa (ASVs) that have a count greater than 6 in at least 20% of the samples
+#Filter Past
 phyP_filt = filter_taxa(phyP, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyP_filt
 
-# Subsetting phyloseq metadata into Acropora only, then by treatment and paired.
+#Subsetting phyloseq metadata into Acropora only, then by treatment and paired.
 Acer = c("Acer")
 phyA = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$CoralSpecies %in% c(Acer) & sample_data(phy)$Paired == "paired")
 phyA.dataframe = as.data.frame(sample_data(phyA))
-
-# Filter Acer phyloseq object that include only the taxa (ASVs) that have a count greater than 6 in at least 20% of the samples
+#Filter Acer
 phyA_filt = filter_taxa(phyA, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 phyA_filt
 
-# Subsetting and filter original phyloseq object
+#Subset and filter original phyloseq object
 phy_sub = subset_samples(phy, sample_data(phy)$Treatment %in% c(DC) & sample_data(phy)$Paired == "paired")
 phy_filt= filter_taxa(phy_sub, function(x) sum(x > 6) > (0.20*length(x)), TRUE)
 
-# Number of samples and taxa in filtered phyloseqs
+#Number of samples and taxa in filtered phyloseqs
 nsamples(phyMO_filt) #28
+ntaxa(phyMO_filt) #302
+
+nsamples(phyMcav_filt) #18
+ntaxa(phyMcav_filt) #311
+
+nsamples(phyOfav_filt) #10
+ntaxa(phyOfav_filt)#332
+
+nsamples(phyOfav2_filt) #8
+ntaxa(phyOfav2_filt)#435
+
+nsamples(phyOfav3_filt) #6
+ntaxa(phyOfav3_filt)#299
 
 nsamples(phyAP_filt) #10
 ntaxa(phyAP_filt) #198
@@ -186,17 +228,11 @@ ntaxa(phyP_filt) #478
 nsamples(phyA_filt) #2
 ntaxa(phyA_filt) #201
 
-nsamples(phyMcav_filt) #18
-ntaxa(phyMcav_filt) #311
-
-nsamples(phyOfav_filt) #10
-ntaxa(phyOfav_filt)#332
-
 #############################################################################################
 
 ## ANCOMBC ANALYSIS ##
 
-# ANCOMBC for Mcav and Ofav by treatment and ASV level
+#ANCOMBC for Mcav and Ofav by treatment and ASV level
 AnMO = ancombc2(
     phyMO_filt,
     assay_name = "otu_table",
@@ -218,7 +254,7 @@ AnMO = ancombc2(
 
 resMO = AnMO$res
 
-# ANCOMBC for Mcav only by treatment and ASV level
+#ANCOMBC for Mcav only by treatment and ASV level
 AnMcav = ancombc2(
   phyMcav_filt,
   assay_name = "otu_table",
@@ -240,7 +276,7 @@ AnMcav = ancombc2(
 
 resMcav = AnMcav$res
 
-# ANCOMBC for Ofav only by treatment and ASV level
+#ANCOMBC for Ofav only by treatment and ASV level
 AnOfav = ancombc2(
   phyOfav_filt,
   assay_name = "otu_table",
@@ -262,7 +298,7 @@ AnOfav = ancombc2(
 
 resOfav = AnOfav$res
 
-# ANCOMBC for Acer and Past by treatment and ASV level
+#ANCOMBC for Acer and Past by treatment and ASV level
 AnAP = ancombc2(
   phyAP_filt,
   assay_name = "otu_table",
@@ -284,46 +320,131 @@ AnAP = ancombc2(
 
 resAP = AnAP$res
 
-# Visualizing ANCOMBC data
-# Create a volcano plot for Mcav and OFav ANCOMBC family level
+#ANCOMBC for removed Ofavs #shows 1 sig. abundant taxa
+AnOfav2 = ancombc2(
+  phyOfav2_filt,
+  assay_name = "otu_table",
+  fix_formula = "Treatment",
+  rand_formula = NULL,
+  p_adj_method = "holm",
+  prv_cut = 0.1,
+  lib_cut = 0,
+  s0_perc = 0.05,
+  group = NULL,
+  struc_zero = FALSE,
+  neg_lb = FALSE,
+  alpha = 0.05,
+  verbose = FALSE,
+  global = FALSE,
+  pairwise = FALSE,
+  dunnet = FALSE,
+  trend = FALSE)
+
+resOfav2 = AnOfav2$res
+#linking the taxon that is significantly abundant to a taxonomy table to see what it is
+#just searched it in the taxonomy table and it came up as an alphaproteobacteria
+
+
+#ANCOMBC for removed Ofavs #shows 1 sig. abundant taxa
+AnOfav3 = ancombc2(
+  phyOfav3_filt,
+  assay_name = "otu_table",
+  fix_formula = "Treatment",
+  rand_formula = NULL,
+  p_adj_method = "holm",
+  prv_cut = 0.1,
+  lib_cut = 0,
+  s0_perc = 0.05,
+  group = NULL,
+  struc_zero = FALSE,
+  neg_lb = FALSE,
+  alpha = 0.05,
+  verbose = FALSE,
+  global = FALSE,
+  pairwise = FALSE,
+  dunnet = FALSE,
+  trend = FALSE)
+
+resOfav3 = AnOfav3$res
+
+#############################################################################################
+
+## VISUALIZING ANCOMBC RESULTS ##
+
+#create a volcano plot for Mcav and OFav ANCOMBC family level
 volcanoMO = ggplot(resMO, aes(x = lfc_TreatmentDisease, y = p_TreatmentDisease)) +
   geom_point() +
   labs(x = "log2 Fold Change", y = "p-value",
        title = "Mcav Ofav Volcano Plot") +
   theme_minimal()
 
-# Display the plot
+#display the plot
 print(volcanoMO)
 
-# Create a volcano plot for Acer and Past ANCOMBC family level
+#create a volcano plot for Acer and Past ANCOMBC family level
 volcanoAP = ggplot(resAP, aes(x = lfc_TreatmentDisease, y = p_TreatmentDisease)) +
   geom_point() +
   labs(x = "log2 Fold Change", y = "p-value",
        title = "Acer Past Volcano Plot") +
   theme_minimal()
 
-# Display the plot
+#display the plot
 print(volcanoAP)
 
 #############################################################################################
 
-## ADDITIONAL PHYLOSEQ ANALYSIS ##
+#### MORE PHYLOSEQ ANALYSIS ####
 
-# Defining significance for wilcox.test
+## ALPHA DIVERSITY ##
+
+#Defining significance for wilcox.test
 symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"))
 
-# Plotting richness for different comparisons 
-comparisons_material_3 = list( c("Past", "Mcav"))
-plot_richness(phy_filt, x="CoralSpecies",color = "CoralSpecies", measure=c("Chao1")) +
+#Plotting richness for Porites only
+comparisons_material_5 = list( c("Control", "Disease"))
+plot_richness(phyP_filt, x="Treatment",color = "CoralSpecies", measure=c("Chao1")) +
   geom_boxplot(alpha=0.2)+
-  stat_compare_means(method = "wilcox.test", comparisons = comparisons_material_3, label = "p.signif", symnum.args = symnum.args)
+  stat_compare_means(method = "wilcox.test", comparisons = comparisons_material_5, label = "p.signif", symnum.args = symnum.args)
 
-# Estimate richness function that returns a table full of shannon and simpson tests
+#Plotting richness for Mcav only
+#Warning to use untrimmed data bc no singletons
+comparisons_material_5 = list( c("Control", "Disease"))
+plot_richness(phyMcav_filt, x="Treatment",color = "CoralSpecies", measure=c("Chao1")) +
+  geom_boxplot(alpha=0.2)+
+  stat_compare_means(method = "wilcox.test", comparisons = comparisons_material_5, label = "p.signif", symnum.args = symnum.args)
+
+#Plotting richness for Ofav only
+#Warning to use untrimmed data bc no singletons
+comparisons_material_5 = list( c("Control", "Disease"))
+plot_richness(phyOfav3_filt, x="Treatment",color = "CoralSpecies", measure=c("Chao1")) +
+  geom_boxplot(alpha=0.2)+
+  stat_compare_means(method = "wilcox.test", comparisons = comparisons_material_5, label = "p.signif", symnum.args = symnum.args)
+
+#Cant do one for Acer only with only 2 samples
+
+#Estimate richness function that returns a table full of shannon and simpson tests
 richMO = estimate_richness(phyMO_filt)
 richMO
 richAP = estimate_richness(phyAP_filt)
+richOfav = estimate_richness(phyOfav2)
+richOfav
 
-#############################################################
+## Unfiltered phyloseq's for alpha diversity ##
+
+phy_prune = prune_taxa(taxa_sums(phy_sub)>0, phy_sub)
+plot_richness(phy_prune, x="Treatment", color = "CoralSpecies", measures=c("Shannon"))
+
+Ofav_prune = prune_taxa(taxa_sums(phyOfav2)>0, phyOfav2)
+plot_richness(Ofav_prune, x="Treatment", color = "CoralSpecies", measures=c("Chao1", "Shannon"))
+
+Mcav_prune = prune_taxa(taxa_sums(phyMcav)>0, phyMcav)
+plot_richness(Mcav_prune, x="Treatment", color = "CoralSpecies", measures=c("Chao1", "Shannon"))
+
+Past_prune = prune_taxa(taxa_sums(phyP)>0, phyP)
+plot_richness(Past_prune, x="Treatment", color = "CoralSpecies", measures=c("Chao1", "Shannon"))
+#still getting the warning to use unfiltered data ???
+
+#############################################################################################
 
 ## RELATIVE ABUNDANCE ##
 
@@ -342,9 +463,9 @@ Example.Colors = (values = c("#8fa746","#404b1f","#8FBC8F",
                                       "lightblue1", "ivory4", "darkorchid", "palevioletred1", "magenta3",
                                       "#DA5724","#404b1f","#8FBC8F", "#CDBE70", "lightsalmon4", "magenta",
                                       "khaki1","#41636f","#00AEEF","#8bbfd2","brown4","#AD6F3B",
-                                      "#90EE90","#8fa746", "#7B68EE", "brown1",)) +
+                                      "#90EE90","#8fa746", "#7B68EE", "brown1",))
 
-# Mcav relative abundance by family level
+#Mcav relative abundance by family level
 Mcav_clr = microbiome::transform(phyMcav_filt, "clr")
 Mcav_comp = microbiome::transform(phyMcav_filt, 'compositional') %>%
   tax_glom("Family")
@@ -365,29 +486,31 @@ mutate_if(Mcav_all,
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
                                       "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
+                                      "#9BBB59",
+                                      "#A7B789",
+                                      "#C2BC80",
+                                      "#A0988C",
+                                      "#9B7362",
+                                      "#A0522D",
+                                      "#A53010",
+                                      "#C0504D",
+                                      "#FFBABA",
+                                      "#BD5282",
+                                      "#9B59B6",
+                                      "#EFBBFF",
+                                      "#BE29EC",
+                                      "#FFD92F",
+                                      "#FEE080",
+                                      "#E6AB02",
+                                      "#FDAE61",
+                                      "#FF8523",
+                                      "#D95F02",
+                                      "#87AFD1",
+                                      "#B1D6C5",
+                                      "#00A08A",
+                                      "#ADD0E1",
+                                      "#506598",
+                                      "#14405A")) +
                                         theme_classic() +
   theme(axis.title.x=element_text(size = 12, vjust = -1),
         axis.title.y = element_text(size = 12, vjust = +2),
@@ -403,67 +526,8 @@ mutate_if(Mcav_all,
 
 plot(Mcav_RA)
 
-# Mcav rel abundance by species this time
-McavS_clr = microbiome::transform(phyMcav_filt, "clr")
-McavS_comp = microbiome::transform(phyMcav_filt, 'compositional') %>%
-  tax_glom("Species")
-McavS_melt =  psmelt(McavS_comp) 
 
-McavS_all = transform_sample_counts(phyMcav_filt, function(x) x / sum(x)) %>%
-  tax_glom("Species")%>% psmelt()
-
-mutate_if(McavS_all,
-          is.character, 
-          stringr::str_replace_all, 
-          pattern = "f__",
-          replacement = "")
-
-McavS_RA = McavS_all %>%
-  subset(Abundance > 0.01) %>%
-  ggplot(  
-    aes(x=Sample, y=Abundance, fill=Species)) + 
-  geom_bar(stat="identity", position="fill") +
-  scale_fill_manual(values=c("#234d20",
-                                      "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
-                                        theme_classic() +
-  theme(axis.title.x=element_text(size = 12, vjust = -1),
-        axis.title.y = element_text(size = 12, vjust = +2),
-        axis.text.y = element_text(size =10),
-        axis.text.x = element_text(angle = 45, size =10, hjust = 1, vjust =1),
-        legend.text = element_text(size = 9),
-        legend.title = element_text(size = 11),
-        legend.key.size = unit(0.5, 'cm'))+
-  theme(strip.text.x = element_text(size = 10))+
-  guides(fill=guide_legend(ncol=1))+
-  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) +
-  ylab("Relative Abundance") + xlab("M. cavernosa samples")
-
-plot(McavS_RA)
-
-# Ofav relative abundance by Family level
+#Ofav relative abundance by Family level
 Ofav_clr = microbiome::transform(phyOfav_filt, "clr")
 Ofav_comp = microbiome::transform(phyOfav_filt, 'compositional') %>%
   tax_glom("Family")
@@ -484,30 +548,32 @@ mutate_if(Ofav_all,
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
-                                      "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
+                             "#36802d", 
+                             "#9BBB59",
+                             "#A7B789",
+                             "#C2BC80",
+                             "#A0988C",
+                             "#9B7362",
+                             "#A0522D",
+                             "#A53010",
+                             "#C0504D",
+                             "#FFBABA",
+                             "#BD5282",
+                             "#9B59B6",
+                             "#EFBBFF",
+                             "#BE29EC",
+                             "#FFD92F",
+                             "#FEE080",
+                             "#E6AB02",
+                             "#FDAE61",
+                             "#FF8523",
+                             "#D95F02",
+                             "#87AFD1",
+                             "#B1D6C5",
+                             "#00A08A",
+                             "#ADD0E1",
+                             "#506598",
+                             "#14405A")) +
                                         theme_classic() +
   theme(axis.title.x=element_text(size = 12, vjust = -1),
         axis.title.y = element_text(size = 12, vjust = +2),
@@ -523,68 +589,133 @@ mutate_if(Ofav_all,
 
 plot(Ofav_RA)
 
-# Acer and Past relative abundance by Family level
-AP_clr = microbiome::transform(phyAP_filt, "clr")
-AP_comp = microbiome::transform(phyAP_filt, 'compositional') %>%
+
+#Removed Ofav CONTROLS relative abundance by Family level
+Ofav2_clr = microbiome::transform(phyOfav2_filt, "clr")
+Ofav2_comp = microbiome::transform(phyOfav2_filt, 'compositional') %>%
   tax_glom("Family")
-AP_melt =  psmelt(AP_comp) 
+Ofav2_melt =  psmelt(Ofav2_comp) 
 
-AP_all = transform_sample_counts(phyAP_filt, function(x) x / sum(x)) %>%
+Ofav2_all = transform_sample_counts(phyOfav2_filt, function(x) x / sum(x)) %>%
   tax_glom("Family")%>% psmelt()
+Ofav2_all
 
-mutate_if(AP_all,
+mutate_if(Ofav2_all,
           is.character, 
           stringr::str_replace_all, 
           pattern = "f__",
           replacement = "") %>%
-  subset(Abundance > 0.03) %>%
+  subset(Abundance > 0.04) %>%
   ggplot(  
     aes(x=Sample, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
-  facet_grid(CoralSpecies ~ Treatment, scales = "free") +
+  facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
                                       "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
+                                      "#9BBB59",
+                                      "#A7B789",
+                                      "#C2BC80",
+                                      "#A0988C",
+                                      "#9B7362",
+                                      "#A0522D",
+                                      "#A53010",
+                                      "#C0504D",
+                                      "#FFBABA",
+                                      "#BD5282",
+                                      "#9B59B6",
+                                      "#EFBBFF",
+                                      "#BE29EC",
+                                      "#FFD92F",
+                                      "#FEE080",
+                                      "#E6AB02",
+                                      "#FDAE61",
+                                      "#FF8523",
+                                      "#D95F02",
+                                      "#87AFD1",
+                                      "#B1D6C5",
+                                      "#00A08A",
+                                      "#ADD0E1",
+                                      "#506598",
+                                      "#14405A")) +
                                         theme_classic() +
   theme(axis.title.x=element_text(size = 12, vjust = -1),
         axis.title.y = element_text(size = 12, vjust = +2),
         axis.text.y = element_text(size =10),
-        axis.text.x = element_text(angle = 45, size =10, hjust = 1),
-        legend.text = element_text(size = 11),
-        legend.title = element_text(size = 13),
+        axis.text.x = element_text(angle = 45, size =10, hjust = 1, vjust =1),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
         legend.key.size = unit(0.5, 'cm'))+
   theme(strip.text.x = element_text(size = 10))+
   guides(fill=guide_legend(ncol=1))+
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) +
-  ylab("Relative Abundance") + xlab("Acropora and Porites Samples")
+  ylab("Relative Abundance") + xlab("O. faveolata Samples")
 
-AP_all
+plot(Ofav2_RA)
 
-plot(AP_RA)
+#Removed Ofav PAIRS relative abundance by Family level
+Ofav3_clr = microbiome::transform(phyOfav3_filt, "clr")
+Ofav3_comp = microbiome::transform(phyOfav3_filt, 'compositional') %>%
+  tax_glom("Family")
+Ofav3_melt =  psmelt(Ofav3_comp) 
 
-# Porites relative abundance by Family level
+Ofav3_all = transform_sample_counts(phyOfav3_filt, function(x) x / sum(x)) %>%
+  tax_glom("Family")%>% psmelt()
+Ofav3_all
+
+mutate_if(Ofav3_all,
+          is.character, 
+          stringr::str_replace_all, 
+          pattern = "f__",
+          replacement = "") %>%
+  subset(Abundance > 0.04) %>%
+  ggplot(  
+    aes(x=Sample, y=Abundance, fill=Family)) + 
+  geom_bar(stat="identity", position="fill") +
+  facet_wrap("Treatment", scales = "free") +
+  scale_fill_manual(values=c("#234d20",
+                                      "#36802d", 
+                                      "#9BBB59",
+                                      "#A7B789",
+                                      "#C2BC80",
+                                      "#A0988C",
+                                      "#9B7362",
+                                      "#A0522D",
+                                      "#A53010",
+                                      "#C0504D",
+                                      "#FFBABA",
+                                      "#BD5282",
+                                      "#9B59B6",
+                                      "#EFBBFF",
+                                      "#BE29EC",
+                                      "#FFD92F",
+                                      "#FEE080",
+                                      "#E6AB02",
+                                      "#FDAE61",
+                                      "#FF8523",
+                                      "#D95F02",
+                                      "#87AFD1",
+                                      "#B1D6C5",
+                                      "#00A08A",
+                                      "#ADD0E1",
+                                      "#506598",
+                                      "#14405A")) +
+                                        theme_classic() +
+  theme(axis.title.x=element_text(size = 12, vjust = -1),
+        axis.title.y = element_text(size = 12, vjust = +2),
+        axis.text.y = element_text(size =10),
+        axis.text.x = element_text(angle = 45, size =10, hjust = 1, vjust =1),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
+        legend.key.size = unit(0.5, 'cm'))+
+  theme(strip.text.x = element_text(size = 10))+
+  guides(fill=guide_legend(ncol=1))+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) +
+  ylab("Relative Abundance") + xlab("O. faveolata Samples")
+
+plot(Ofav3_RA)
+
+
+#Porites relative abundance by Family level
 P_clr = microbiome::transform(phyP_filt, "clr")
 P_comp = microbiome::transform(phyP_filt, 'compositional') %>%
   tax_glom("Family")
@@ -605,29 +736,31 @@ mutate_if(P_all,
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
                                       "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
+                                      "#9BBB59",
+                                      "#A7B789",
+                                      "#C2BC80",
+                                      "#A0988C",
+                                      "#9B7362",
+                                      "#A0522D",
+                                      "#A53010",
+                                      "#C0504D",
+                                      "#FFBABA",
+                                      "#BD5282",
+                                      "#9B59B6",
+                                      "#EFBBFF",
+                                      "#BE29EC",
+                                      "#FFD92F",
+                                      "#FEE080",
+                                      "#E6AB02",
+                                      "#FDAE61",
+                                      "#FF8523",
+                                      "#D95F02",
+                                      "#87AFD1",
+                                      "#B1D6C5",
+                                      "#00A08A",
+                                      "#ADD0E1",
+                                      "#506598",
+                                      "#14405A")) +
                                         theme_classic() +
   theme(axis.title.x=element_text(size = 12, vjust = -1),
         axis.title.y = element_text(size = 12, vjust = +2),
@@ -643,7 +776,7 @@ mutate_if(P_all,
 
 plot(P_RA)
 
-# Acropora relative abundance by Family level
+#Acropora relative abundance by Family level
 A_clr = microbiome::transform(phyA_filt, "clr")
 A_comp = microbiome::transform(phyA_filt, 'compositional') %>%
   tax_glom("Family")
@@ -664,29 +797,31 @@ mutate_if(A_all,
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
                                       "#36802d", 
-                                      "#77ab59",
-                                      "#e8f4ea",
-                                      "#f0f7da", 
-                                      "#005073", 
-                                      "#107dac", 
-                                      "#189ad3",
-                                      "#1ebbd7",
-                                      "#71c7ec",
-                                      "#ffbaba", 
-                                      "#ff7b7b",
-                                      "#ff0000",
-                                      "#a70000",
-                                      "#efbbff", 
-                                      "#d896ff", 
-                                      "#be29ec", 
-                                      "#ffc2cd",
-                                      "#FFFFCC",
-                                      "#fff9ae",
-                                      "#ffd7b5",
-                                      "#ffb38a",
-                                      "#ff9248",
-                                      "#ff6700",
-                                      "#a3c1ad")) +
+                                      "#9BBB59",
+                                      "#A7B789",
+                                      "#C2BC80",
+                                      "#A0988C",
+                                      "#9B7362",
+                                      "#A0522D",
+                                      "#A53010",
+                                      "#C0504D",
+                                      "#FFBABA",
+                                      "#BD5282",
+                                      "#9B59B6",
+                                      "#EFBBFF",
+                                      "#BE29EC",
+                                      "#FFD92F",
+                                      "#FEE080",
+                                      "#E6AB02",
+                                      "#FDAE61",
+                                      "#FF8523",
+                                      "#D95F02",
+                                      "#87AFD1",
+                                      "#B1D6C5",
+                                      "#00A08A",
+                                      "#ADD0E1",
+                                      "#506598",
+                                      "#14405A")) +
                                         theme_classic() +
   theme(axis.title.x=element_text(size = 12, vjust = -1),
         axis.title.y = element_text(size = 12, vjust = +2),
@@ -702,72 +837,73 @@ mutate_if(A_all,
 
 plot(A_RA)
 
+
 #############################################################
 
-## Core Members ##
+## CORE MEMBERS ##
 
-# Find the core members of the microbiome for Mcav and Ofav
+#find the core members of the microbiome for Mcav and Ofav
 phyrelMO = microbiome::transform(phyMO_filt, "compositional")
 coreMO = core_members(phyrelMO,
                        detection = 0.001, # 0.001 in at least 90% samples 
                        prevalence = 0.10) 
 
-# Get the taxonomic information aligned for Mcav and Ofav core taxa
+#get the taxonomic information aligned for Mcav and Ofav core taxa
 core_taxaMO = tax_table(phyMO_filt)[coreMO]
 print(core_taxaMO)
 
-# Find the core members of the microbiome for Acer and Past
+#find the core members of the microbiome for Acer and Past
 phyrelAP = microbiome::transform(phyAP_filt, "compositional")
 coreAP = core_members(phyrelAP,
                     detection = 0.001, # 0.001 in at least 90% samples 
                     prevalence = 0.10) 
 
-# Get the taxonomic information aligned for Acer and Past core taxa
+#get the taxonomic information aligned for Acer and Past core taxa
 core_taxaAP = tax_table(phyAP)[coreAP]
 print(core_taxaAP)
 
-# Convert core taxa to a data frame and filter out any core taxa that have NA's in the phylum column
+#convert core taxa to a data frame and filter out any core taxa that have NA's in the phylum column
 coreMOdf = as.data.frame(core_taxa) #351 obs
 coreAPdf = as.data.frame(core_taxaAP) #142 obs
 coreMOdf_filtered <- filter(coreMOdf, !is.na(Phylum)) #335 obs
 coreAPdf_filtered <- filter(coreAPdf, !is.na(Phylum)) #130 obs
 
-# Plotting the core taxa for MO at family level
+#plotting the core taxa for MO at family level
 ggplot(coreMOdf_filtered, aes(x = Family)) +
   geom_bar(fill = "purple") +
   labs(x = "Family", y = "Count", title = "Mcav Ofav Taxa at Family Level") +
   theme_minimal()+ 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-# Plotting the core taxa for AP at family level
+#plotting the core taxa for AP at family level
 ggplot(coreAPdf_filtered, aes(x = Family)) +
   geom_bar(fill = "skyblue") +
   labs(x = "Family", y = "Count", title = "Acer Past Taxa at Family Level") +
   theme_minimal()+ 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-#############################################################
+#############################################################################################
 
-## BETA DIVERSITY ##
+## BETA-DIVERSITY ##
 
-# Beta diversity for MO on a pca plot 
+#Beta diversity for MO on a pca plot 
 phyMO_clr = microbiome::transform(phyMO_filt, 'clr')
 phyMO_ord = ordinate(phyMO_clr, "RDA", "euclidean")
-plot_ordination(phyMO_clr,phyMO_ord, type = "samples", color="CoralSpecies")
+plot_ordination(phyMO_clr,phyMO_ord, type = "samples", color="Treatment", shape="CoralSpecies")
 
-# Beta diversity for AP on a pca plot 
+#Beta diversity for AP on a pca plot 
 phyAP_clr = microbiome::transform(phyAP_filt, 'clr')
 phyAP_ord = ordinate(phyAP_clr, "RDA", "euclidean")
-plot_ordination(phyAP_clr,phyAP_ord, type = "samples", color="CoralSpecies")
+plot_ordination(phyAP_clr,phyAP_ord, type = "samples", color="Treatment", shape = "CoralSpecies")
 
-#############################################################
+#############################################################################################
 
-## WILCOXON TEST ##
+## WILCOXON TEST ## 
 
-# Extracting the abundance data from the phyMcav_filt phyloseq object and converting it into a numeric vector
+#Extracting the abundance data from the phyMcav_filt phyloseq object and converting it into a numeric vector
 wiltest = as.numeric(otu_table(phyMcav_filt)[, 1])
 as.data.frame(wiltest)
-# Wilcoxon test
+#Wilcoxon test
 wilcox.test(wiltest, y = NULL,
             alternative = "two.sided",
             mu = 0, paired = FALSE, exact = NULL, correct = TRUE,
@@ -778,15 +914,15 @@ wilcox.test(wiltest, y = NULL,
 #V = 378, p-value = 5.88e-06
 #alternative hypothesis: true location is not equal to 0
 #99 percent confidence interval:
-#37.00004 1662.50006
+#  37.00004 1662.50006
 #sample estimates:
-#(pseudo)median 
+#  (pseudo)median 
 #210.5 
 
-# Extracting the abundance data from the phyOfav_filt phyloseq object and converting it into a numeric vector
+#Extracting the abundance data from the phyOfav_filt phyloseq object and converting it into a numeric vector
 wiltest = as.numeric(otu_table(phyOfav_filt)[, 1])
 as.data.frame(wiltest)
-# Wilcoxon test
+#Wilcoxon test
 wilcox.test(wiltest, y = NULL,
             alternative = "two.sided",
             mu = 0, paired = FALSE, exact = NULL, correct = TRUE,
@@ -797,15 +933,15 @@ wilcox.test(wiltest, y = NULL,
 #V = 15400, p-value < 2.2e-16
 #alternative hypothesis: true location is not equal to 0
 #99 percent confidence interval:
-#34.00001 62.50000
+#  34.00001 62.50000
 #sample estimates:
-#(pseudo)median 
+#  (pseudo)median 
 #47 
 
-# Extracting the abundance data from the phyAP_filt phyloseq object and converting it into a numeric vector
+#Extracting the abundance data from the phyAP_filt phyloseq object and converting it into a numeric vector
 wiltestAP = as.numeric(otu_table(phyAP_filt)[, 1])
 as.data.frame(wiltestAP)
-#wilcoxon test
+#Wilcoxon test
 wilcox.test(wiltestAP, y = NULL,
             alternative = "two.sided",
             mu = 0, paired = FALSE, exact = NULL, correct = TRUE,
@@ -816,37 +952,44 @@ wilcox.test(wiltestAP, y = NULL,
 #V = 8778, p-value < 2.2e-16
 #alternative hypothesis: true location is not equal to 0
 #99 percent confidence interval:
-#38.50001 83.00004
+#  38.50001 83.00004
 #sample estimates:
-#(pseudo)median 
+#  (pseudo)median 
 #54.50002
 
-#############################################################
+#############################################################################################
 
 ## PERMUTATIONAL ANOVA ##
 
-# Test whether the Treatments among Mcav and Ofav differ significantly from each other using the permutational ANOVA 
-anova_MO = phyloseq::distance(phyMO_filt, method = "euclidean")
-pairwise.adonis(t(otu_table(phyMO_filt)), sample_data(phyMO_filt)$Treatment, sim.method = "euclidean",
-                p.adjust.m = "bonferroni")
-#pairs                Df   SumsOfSqs  F.Model    R2           p.value   p.adjusted     sig
-#1 Control vs Disease  1   336793348  1.5067     0.05477575   0.375      0.375   
-
-# Test whether the Treatments among only Mcav differ significantly from each other using the permutational ANOVA 
+#Test whether the Treatments among Mcav only differ significantly from each other using the permutational ANOVA 
 anova_Mcav = phyloseq::distance(phyMcav_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyMcav_filt)), sample_data(phyMcav_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model        R2       p.value     p.adjusted   sig
 #1 Disease vs Control  1  478523212   1.648107     0.0933872   0.362      0.362  
 
-# Test whether the Treatments among Ofav only differ significantly from each other using the permutational ANOVA 
+#Test whether the Treatments among Ofav only differ significantly from each other using the permutational ANOVA 
 anova_Ofav = phyloseq::distance(phyOfav_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyOfav_filt)), sample_data(phyOfav_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model      R2         p.value    p.adjusted    sig
 #1 Control vs Disease  1  99199975   0.9661692    0.1077572   0.569      0.569 
 
-# Test whether the Treatments among Acer and Past differ significantly from each other using the permutational ANOVA 
+#Test whether the Treatments among Removed Ofav differ significantly from each other using the permutational ANOVA 
+anova_Ofav2 = phyloseq::distance(phyOfav2_filt, method = "euclidean")
+pairwise.adonis(t(otu_table(phyOfav2_filt)), sample_data(phyOfav2_filt)$Treatment, sim.method = "euclidean",
+                p.adjust.m = "bonferroni")
+#pairs                Df   SumsOfSqs   F.Model      R2         p.value    p.adjusted    sig
+#1 Control vs Disease  1  78458742    0.5930492    0.08995068   0.784      0.784 
+
+#Test whether the Treatments among Removed Ofav PAIRS differ significantly from each other using the permutational ANOVA 
+anova_Ofav3 = phyloseq::distance(phyOfav3_filt, method = "euclidean")
+pairwise.adonis(t(otu_table(phyOfav3_filt)), sample_data(phyOfav3_filt)$Treatment, sim.method = "euclidean",
+                p.adjust.m = "bonferroni")
+#pairs                Df  SumsOfSqs   F.Model      R2          p.value    p.adjusted    sig
+#1 Control vs Disease  1  17190252    0.6942538    0.1478944     0.7        0.7  
+
+#Test whether the Treatments among Acer and Past differ significantly from each other using the permutational ANOVA 
 anova_AP = phyloseq::distance(phyAP_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyAP_filt)), sample_data(phyAP_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
