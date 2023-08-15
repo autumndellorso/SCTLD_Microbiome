@@ -73,6 +73,13 @@ setwd("C:/Users/dello/OneDrive/Documents/NOAA Internship")
 
 #Reading in the metadata csv file from the NOAA drive steph and I made
 metadata = read.csv("Revised_Metadata_SR.csv", header = TRUE, row.names = 1)
+metadata$SampleID=c("s55","s57","s74","s104","s12","s19","s21","s29","s60","s76","s7","s97","s14","s71","s16","s102","s32","s99","s80",
+                                 "s26","s100","s103","s105","s11","s13","s27","s2","s4","s54","s58","s61","s64","s66","s67","s69","s72","s73","s75",
+                                 "s91","s98","s96","s18","s6","s68","s78","s79","s101","s33","s34","s35",
+                                   "s36","s37","s38","s41","s42","s43","s44","s45","s46","s47","s48","s49","s50","s51","s52","s10","s15","s17","s1",
+                                   "s22","s23","s24","s25","s28","s30","s31","s39","s3","s53","s56","s59","s5","s62","s63","s65","s70","s77","s81",
+                                   "s82","s83","s84","s85","s86","s87","s88","s89","s8","s90","s92","s93","s94","s95","s9")
+as.character(metadata$SampleID)
 
 #Removing two samples from metadata that I wont need for later Ofav analysis
 metadata_O = metadata[!row.names(metadata) %in% c("100-Autumn16s", "13-Autumn16s"),]
@@ -966,32 +973,39 @@ anova_Mcav = phyloseq::distance(phyMcav_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyMcav_filt)), sample_data(phyMcav_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model        R2       p.value     p.adjusted   sig
-#1 Disease vs Control  1  478523212   1.648107     0.0933872   0.362      0.362  
+#1 Disease vs Control  1  478523212   1.648107     0.0933872   0.362      0.362          1
 
 #Test whether the Treatments among Ofav only differ significantly from each other using the permutational ANOVA 
 anova_Ofav = phyloseq::distance(phyOfav_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyOfav_filt)), sample_data(phyOfav_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model      R2         p.value    p.adjusted    sig
-#1 Control vs Disease  1  99199975   0.9661692    0.1077572   0.569      0.569 
+#1 Control vs Disease  1  99199975   0.9661692    0.1077572   0.569      0.569         1
 
 #Test whether the Treatments among Removed Ofav differ significantly from each other using the permutational ANOVA 
 anova_Ofav2 = phyloseq::distance(phyOfav2_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyOfav2_filt)), sample_data(phyOfav2_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df   SumsOfSqs   F.Model      R2         p.value    p.adjusted    sig
-#1 Control vs Disease  1  78458742    0.5930492    0.08995068   0.784      0.784 
+#1 Control vs Disease  1  78458742    0.5930492    0.08995068   0.784      0.784         1
 
 #Test whether the Treatments among Removed Ofav PAIRS differ significantly from each other using the permutational ANOVA 
 anova_Ofav3 = phyloseq::distance(phyOfav3_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyOfav3_filt)), sample_data(phyOfav3_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model      R2          p.value    p.adjusted    sig
-#1 Control vs Disease  1  17190252    0.6942538    0.1478944     0.7        0.7  
+#1 Control vs Disease  1  17190252    0.6942538    0.1478944     0.7        0.7          1
 
 #Test whether the Treatments among Acer and Past differ significantly from each other using the permutational ANOVA 
 anova_AP = phyloseq::distance(phyAP_filt, method = "euclidean")
 pairwise.adonis(t(otu_table(phyAP_filt)), sample_data(phyAP_filt)$Treatment, sim.method = "euclidean",
                 p.adjust.m = "bonferroni")
 #pairs                Df  SumsOfSqs   F.Model      R2          p.value    p.adjusted    sig
-#1 Disease vs Control  1   293616046  0.5486262   0.06417712       1          1   
+#1 Disease vs Control  1   293616046  0.5486262   0.06417712       1          1           1
+
+#Test whether the Treatments among Past differ significantly from each other using the permutational ANOVA 
+anova_P = phyloseq::distance(phyP_filt, method = "euclidean")
+pairwise.adonis(t(otu_table(phyP_filt)), sample_data(phyP_filt)$Treatment, sim.method = "euclidean",
+                p.adjust.m = "bonferroni")
+#pairs                 Df   SumsOfSqs   F.Model        R2           p.value    p.adjusted    sig
+#1 Disease vs Control  1   128088335     0.7921117     0.1166223       1           1           1
