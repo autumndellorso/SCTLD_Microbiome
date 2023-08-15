@@ -488,7 +488,7 @@ mutate_if(Mcav_all,
           replacement = "") %>%
   subset(Abundance > 0.04) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
@@ -551,7 +551,7 @@ mutate_if(Ofav_all,
           replacement = "") %>%
   subset(Abundance > 0.04) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
@@ -614,7 +614,7 @@ mutate_if(Ofav2_all,
           replacement = "") %>%
   subset(Abundance > 0.04) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
@@ -676,7 +676,7 @@ mutate_if(Ofav3_all,
           replacement = "") %>%
   subset(Abundance > 0.04) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
@@ -738,7 +738,7 @@ mutate_if(P_all,
           replacement = "") %>%
   subset(Abundance > 0.03) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
@@ -799,7 +799,7 @@ mutate_if(A_all,
           replacement = "") %>%
   subset(Abundance > 0.01) %>%
   ggplot(  
-    aes(x=Sample, y=Abundance, fill=Family)) + 
+    aes(x=SampleID, y=Abundance, fill=Family)) + 
   geom_bar(stat="identity", position="fill") +
   facet_wrap("Treatment", scales = "free") +
   scale_fill_manual(values=c("#234d20",
